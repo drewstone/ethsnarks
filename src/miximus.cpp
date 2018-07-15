@@ -24,18 +24,28 @@
 
 #include <sha256/sha256_ethereum.cpp>
 #include <export.cpp>
-#include "main.hpp"
+#include "miximus.hpp"
 //key gen 
 #include "libff/algebra/curves/alt_bn128/alt_bn128_pp.hpp" //hold key
 
 
-#include <libsnark/common/data_structures/merkle_tree.hpp>
-#include <libsnark/gadgetlib1/gadget.hpp>
-#include <libsnark/gadgetlib1/gadgets/merkle_tree/merkle_authentication_path_variable.hpp>
-#include <libsnark/gadgetlib1/gadgets/merkle_tree/merkle_tree_check_read_gadget.hpp>
+typedef libff::alt_bn128_pp ppT;
 
-#include <libsnark/gadgetlib1/gadgets/merkle_tree/merkle_tree_check_read_gadget.hpp>
-#include <libsnark/gadgetlib1/gadgets/merkle_tree/merkle_tree_check_update_gadget.hpp>
+
+#include <libsnark/gadgetlib1/gadget.hpp>
+
+#include <libsnark/gadgetlib1/gadgets/pairing/pairing_params.hpp>
+#include <libsnark/gadgetlib1/gadgets/curves/weierstrass_g1_gadget.hpp>
+
+namespace libsnark {
+template<>
+class pairing_selector<libff::alt_bn128_pp> {
+public:
+    typedef libff::alt_bn128_pp other_curve_type;
+    // Fqe_variable = G1
+    // Fqk_variable = G2 ?
+};
+}
 
 using namespace libsnark;
 using namespace libff;
@@ -47,73 +57,45 @@ class Miximus {
 public:
 
     const size_t digest_len = HashT::get_digest_len();
-    size_t tree_depth;
     protoboard<FieldT> pb;
-
-    std::shared_ptr<multipacking_gadget<FieldT>> unpacker;
-
-    //digest_variable<FieldT> root_digest(pb, digest_len, "root_digest");
-    std::shared_ptr<digest_variable<FieldT>> root_digest;
-    //digest_variable<FieldT> cm(pb, digest_len, "cm_digest");
-    std::shared_ptr<digest_variable<FieldT>> cm;
-    //digest_variable<FieldT> sk(pb, digest_len, "sk_digest");
-    std::shared_ptr<digest_variable<FieldT>> sk;
-    //digest_variable<FieldT> leaf_digest(pb, digest_len, "leaf_digest");
-    std::shared_ptr<digest_variable<FieldT>> leaf_digest;
-
-    std::shared_ptr<sha256_ethereum> cm_hash;
-    std::shared_ptr<sha256_ethereum> nullifier_hash;
-
-    // semaphore sprecifc variables
-    std::shared_ptr<digest_variable<FieldT>> signal;
-    std::shared_ptr<digest_variable<FieldT>> signal_variables;
-    std::shared_ptr<digest_variable<FieldT>> external_nullifier;
-    std::shared_ptr<digest_variable<FieldT>> nullifier;
-
-
-    std::shared_ptr<merkle_authentication_path_variable<FieldT, HashT>> path_var;
-
-    std::shared_ptr<merkle_tree_check_read_gadget<FieldT, HashT>> ml;
-
-    pb_variable_array<FieldT> address_bits_va;
-    std::shared_ptr <block_variable<FieldT>> input_variable;
-    std::shared_ptr <block_variable<FieldT>> nullifier_variable;
-
     pb_variable<FieldT> ZERO;
-    //we use layer 2 transaction abstration. 
-    //here the depositor denotes the fee in Wei
-    pb_variable<FieldT> msgSenderFee;
 
+    // input unpacking
+    std::shared_ptr<multipacking_gadget<FieldT> > unpacker;
     pb_variable_array<FieldT> packed_inputs;
     pb_variable_array<FieldT> unpacked_inputs;
 
-    Miximus(int _tree_depth) {
-        tree_depth = _tree_depth;
+    // input variables
+    std::shared_ptr<digest_variable<FieldT> > signal;
 
-        packed_inputs.allocate(pb, 5 + 1, "packed");
+    // local state
+    std::shared_ptr<sha256_ethereum> input_hash;
+    std::shared_ptr<block_variable<FieldT> > input_variable;
+    std::shared_ptr<digest_variable<FieldT> > input_digest;
 
-        msgSenderFee.allocate(pb, "msgSenderFee");
+    pb_variable_array<FieldT> member_scalars;
+    std::shared_ptr<G1_variable<ppT> > member_public;
+    std::shared_ptr<G1_variable<ppT> > G1_ONE;
+    std::shared_ptr<G1_multiscalar_mul_gadget<ppT> > member_mult;
+
+    Miximus() {
+        // 
+        int num_input_vars = 1;
+        packed_inputs.allocate(pb, num_input_vars + 1, "packed");
+        pb.set_input_sizes(num_input_vars + 1);
+
         ZERO.allocate(pb, "ZERO");
         pb.val(ZERO) = 0;
-        address_bits_va.allocate(pb, tree_depth, "address_bits");
 
-        cm.reset(new digest_variable<FieldT>(pb, 256, "cm"));
-        root_digest.reset(new digest_variable<FieldT>(pb, 256, "root_digest"));
-        sk.reset(new digest_variable<FieldT>(pb, 256, "sk"));
-        leaf_digest.reset(new digest_variable<FieldT>(pb, 256, "leaf_digest"));
-
+        // Input variables
         signal.reset(new digest_variable<FieldT>(pb, 256, "signal"));
-        signal_variables.reset(new digest_variable<FieldT>(pb, 256, "signal_variables"));
-        external_nullifier.reset(new digest_variable<FieldT>(pb, 256, "external_nullifier"));
-        nullifier.reset(new digest_variable<FieldT>(pb, 256, "nullifier"));
 
+        // State variables
+        input_digest.reset(new digest_variable<FieldT>(pb, 256, "input_digest"));
 
-        //unpacked_inputs.insert(unpacked_inputs.end(), true );
-        unpacked_inputs.insert(unpacked_inputs.end(), root_digest->bits.begin(), root_digest->bits.end());
+        // Unpack the inputs
+        // Add more inputs here
         unpacked_inputs.insert(unpacked_inputs.end(), signal->bits.begin(), signal->bits.end());
-        unpacked_inputs.insert(unpacked_inputs.end(), signal_variables->bits.begin(), signal_variables->bits.end());
-        unpacked_inputs.insert(unpacked_inputs.end(), external_nullifier->bits.begin(), external_nullifier->bits.end());
-        unpacked_inputs.insert(unpacked_inputs.end(), nullifier->bits.begin(), nullifier->bits.end());
 
         unpacker.reset(new multipacking_gadget<FieldT>(
             pb,
@@ -123,41 +105,41 @@ public:
             "unpacker"
         ));
 
-        pb.set_input_sizes(5 + 1 );
 
-        input_variable.reset(new block_variable<FieldT>(pb, *cm, *sk, "input_variable")); 
-        nullifier_variable.reset(new block_variable<FieldT>(pb, *cm, *external_nullifier, "nullifier_variable"));
-
-        cm_hash.reset(new sha256_ethereum(
-            pb, SHA256_block_size, *input_variable, *leaf_digest, "cm_hash"
-        ));
-        //sha256_ethereum g(pb, SHA256_block_size, *input_variable, *leaf_digest, "g");
-
-
-        nullifier_hash.reset(new sha256_ethereum(
-            pb, SHA256_block_size, *nullifier_variable, *nullifier, "nullifier_hash"
+        // SHA256(signal, signal)
+        input_variable.reset(new block_variable<FieldT>(pb, *signal, *signal, "input_variable"));
+        input_hash.reset(new sha256_ethereum(
+            pb, SHA256_block_size, *input_variable, *input_digest, "input_hash"
         ));
 
 
-        path_var.reset(new merkle_authentication_path_variable<FieldT, HashT> (pb, tree_depth, "path_var" ));
+        // multiply(G1, signal)
+        member_public.reset(new G1_variable<ppT>(pb, "member_public"));
+        member_scalars.allocate(pb, 1, "member_scalars");
+        std::vector<G1_variable<ppT> > member_points;
 
-        //merkle_authentication_path_variable<FieldT, HashT> path_var(pb, tree_depth, "path_var");
+        member_mult.reset(new G1_multiscalar_mul_gadget<ppT>(pb,
+            G1_ONE,
+            member_scalars,
+            FieldT::size_in_bits(),
+            member_points,
+            member_public, // result
+            "member_mult"
+        ));
 
-        ml.reset(new merkle_tree_check_read_gadget<FieldT, HashT>(pb, tree_depth, address_bits_va, *leaf_digest, *root_digest, *path_var, ONE, "ml"));
-        //merkle_tree_check_read_gadget<FieldT, HashT> ml(pb, tree_depth, address_bits_va, *leaf_digest, *root_digest, path_var, ONE, "ml");
 
         // generate constraints
-        //root_digest.generate_r1cs_constraints();
         unpacker->generate_r1cs_constraints(true);
-        signal->generate_r1cs_constraints();
-        signal_variables->generate_r1cs_constraints(); 
         generate_r1cs_equals_const_constraint<FieldT>(pb, ZERO, FieldT::zero(), "ZERO");
-        cm_hash->generate_r1cs_constraints(true);
-        nullifier_hash->generate_r1cs_constraints(true);
-        nullifier->generate_r1cs_constraints();
-        external_nullifier -> generate_r1cs_constraints(); 
-        path_var->generate_r1cs_constraints();
-        ml->generate_r1cs_constraints();
+
+        // Input variables
+        signal->generate_r1cs_constraints();
+
+        // Functions
+        input_hash->generate_r1cs_constraints(true);
+        member_mult->generate_r1cs_constraints();
+
+        printf("number of constraints is = %zu\n", pb.num_constraints());
     }
 
     void writeKeysToFile(char* pk , char* vk) {
@@ -172,32 +154,15 @@ public:
         writeToFile("../zksnark_element/vk.raw", keypair.vk); 
     }
 
-    char* prove(std::vector<merkle_authentication_node> path, int address, libff::bit_vector address_bits , 
-                libff::bit_vector _nullifier , libff::bit_vector secret , libff::bit_vector root,
-                libff::bit_vector _signal, libff::bit_vector _signal_variables, libff::bit_vector _external_nullifier , 
-                int fee, char* pk , bool isInt
-                ) { 
+    char* prove(libff::bit_vector _signal, 
+                char* pk , bool isInt)
+    { 
 
-        cm->generate_r1cs_witness(_nullifier);
-        sk->generate_r1cs_witness(secret);
         signal->generate_r1cs_witness(_signal);
-        signal_variables->generate_r1cs_witness(_signal_variables);
-        nullifier->generate_r1cs_witness(_external_nullifier);
 
-        cm_hash->generate_r1cs_witness();  
-        external_nullifier -> generate_r1cs_witness(_external_nullifier);
-        nullifier_hash->generate_r1cs_witness();
-        address_bits_va.fill_with_bits(pb, address_bits);
-        assert(address_bits_va.get_field_element_from_bits(pb).as_ulong() == address);
-        pb.val(msgSenderFee) = fee;
+        input_hash->generate_r1cs_witness();  
 
 
-        path_var->generate_r1cs_witness(address, path);
-        ml->generate_r1cs_witness();
-
-        // make sure that read checker didn't accidentally overwrite anything 
-        address_bits_va.fill_with_bits(pb, address_bits);
-        root_digest->generate_r1cs_witness(root);
         unpacker->generate_r1cs_witness_from_bits();
             
         r1cs_ppzksnark_keypair<libff::alt_bn128_pp> keypair;
@@ -220,11 +185,11 @@ public:
     }
 };
 
-void genKeys(int tree_depth, char* pkOutput, char* vkOuput) {
+void genKeys(char* pkOutput, char* vkOuput) {
 
     libff::alt_bn128_pp::init_public_params();
-    Miximus<FieldT, sha256_ethereum> c (tree_depth);
-    c.writeKeysToFile(pkOutput, vkOuput );
+    Miximus<FieldT, sha256_ethereum> c;
+    c.writeKeysToFile(pkOutput, vkOuput);
 }
 
 bool verify( char* vk, char* _g_A_0, char* _g_A_1, char* _g_A_2 ,  char* _g_A_P_0, char* _g_A_P_1, char* _g_A_P_2, 
@@ -377,60 +342,22 @@ bool verify( char* vk, char* _g_A_0, char* _g_A_1, char* _g_A_2 ,  char* _g_A_P_
 
 }
 
-char* prove(bool _path[][256], bool _signal[256], bool _signal_variables[256] , bool _external_nullifier[256],  int _address, bool _address_bits[], int tree_depth, int fee, char* pk, bool isInt) { 
-
+char* prove(bool in_signal[256], char* pk, bool isInt)
+{ 
     libff::alt_bn128_pp::init_public_params();
-    libff::bit_vector init(0,256);
-    libff::bit_vector _nullifier(0,256);
-    libff::bit_vector _secret(0, 256);
-    libff::bit_vector _root(0,256);
     libff::bit_vector signal(0,256);
-    libff::bit_vector signal_variables(0,256);
-    libff::bit_vector external_nullifier(0,256);
 
-    libff::bit_vector address_bits;
-
-    std::vector<merkle_authentication_node> path(tree_depth);
-
-    init.resize(256);
-
-    path.resize(tree_depth);
-    _nullifier.resize(256);    
-    _secret.resize(256);
-    _root.resize(256);
     signal.resize(256);
-    signal_variables.resize(256);
-    external_nullifier.resize(256);
 
-    std::cout << "tree depth: " << tree_depth << std::endl;
-    for (int i =tree_depth - 1; i>=0 ; i--) {
-        path[i] = init;
-        for (int j =0; j<sizeof(_path[0]); j++) {
-            path[i][j] = _path[i][j];
-       } 
+    for( int j = 0; j < 256; j ++ )
+    {
+        signal[j] = in_signal[j];
     }
 
-    for (int j = 0 ; j <256 ; j++) { 
-        _nullifier[j] = _path[tree_depth][j];
-        _secret[j] = _path[tree_depth+1][j];
-        _root[j] = _path[tree_depth + 2][j];
-        signal[j] = _signal[j];
-        signal_variables[j] = _signal_variables[j]; 
-        external_nullifier[j] = _external_nullifier[j];
-    } 
-
-    size_t address = 0;
-    for (long level = tree_depth-1; level >= 0; level--)
-    {  
-        const bool computed_is_right = _address_bits[level];
-        address |= (computed_is_right ? 1ul << (tree_depth-1-level) : 0);
-        address_bits.push_back(computed_is_right);
-    } 
-
     libff::alt_bn128_pp::init_public_params();
-    Miximus<FieldT, sha256_ethereum> c(tree_depth);
+    Miximus<FieldT, sha256_ethereum> c;
 
-    auto out = c.prove(path, address , address_bits, _nullifier, _secret, _root, signal, signal_variables, external_nullifier, fee, pk, isInt);
+    auto out = c.prove(signal, pk, isInt);
 
     return(out); 
 }

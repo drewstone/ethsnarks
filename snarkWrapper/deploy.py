@@ -36,16 +36,20 @@ tree_depth = 29
 lib = cdll.LoadLibrary('../src/libmiximus.so')
 
 
+"""
 prove = lib.prove
 prove.argtypes = [((c.c_bool*256)*(tree_depth + 3)), (c.c_bool*256), (c.c_bool*256) , (c.c_bool*256), c.c_int, ((c.c_bool*tree_depth)), c.c_int, c.c_int, c.c_char_p, c.c_bool] 
 prove.restype = c.c_char_p
+"""
+
 genKeys = lib.genKeys
-genKeys.argtypes = [c.c_int, c.c_char_p, c.c_char_p]
+genKeys.argtypes = [c.c_char_p, c.c_char_p]
 
-
+"""
 verify = lib.verify
 verify.argtypes = [c.c_char_p, c.c_char_p , c.c_char_p , c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p , c.c_char_p, c.c_char_p, c.c_char_p,  c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p, c.c_char_p ]
 verify.restype = c.c_bool
+"""
 
 
 def binary2ctypes(out):

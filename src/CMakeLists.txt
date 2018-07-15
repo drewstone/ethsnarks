@@ -3,12 +3,22 @@ include_directories(.)
 add_library(
   miximus
   SHARED
-  main.cpp
+  miximus.cpp
+)
+
+add_executable(
+  genKeys
+  main_genKeys.cpp
 )
 
 target_link_libraries(
   miximus
   snark
+)
+
+target_link_libraries(
+  genKeys
+  miximus
 )
 
 

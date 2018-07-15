@@ -26,8 +26,8 @@ extern "C" {
 
 char* _sha256Constraints();
 char* _sha256Witness();
-char* prove(bool path[][256], bool _signal[256], bool _signal_variables[256] , bool _external_nullifier[256], int address, bool _address_bits[], int tree_depth, int fee, char* pk, bool isInt);
-void genKeys(int tree_depth, char* pkOutput, char* vkOuput );
+char* prove(bool in_signal[256], char* pk, bool isInt);
+void genKeys(char* pkOutput, char* vkOuput );
 
 
 bool verify( char* vk, char* _g_A_0, char* _g_A_1, char* _g_A_2 ,  char* _g_A_P_0, char* _g_A_P_1, char* _g_A_P_2,

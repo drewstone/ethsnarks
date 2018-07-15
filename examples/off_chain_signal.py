@@ -17,13 +17,14 @@
     along with Semaphore.  If not, see <https://www.gnu.org/licenses/>.
 '''
 
+from time import time
+import os
 import sys
 sys.path.insert(0, '../snarkWrapper')
 from deploy import *
 from helpers import initMerkleTree
 from utils import genMerkelTree, sha256
 import hashlib
-import time
 import random
 
 
@@ -33,15 +34,21 @@ if __name__ == "__main__":
     vk_output = "../zksnark_element/vk.json"
 
     # perform the trusted setup making hte proving key ,  verification key
-    genKeys(c.c_int(tree_depth), c.c_char_p(pk_output.encode()) , c.c_char_p(vk_output.encode()))
+    if not os.path.exists(pk_output):
+        genKeys(c.c_int(tree_depth), c.c_char_p(pk_output.encode()) , c.c_char_p(vk_output.encode()))
 
 
     #part 1 merkel tree setup which act as the census of the vote
     #make merkel Tree with 10 members
     #This is a trusted part but it can be varified by the users before teh 
-    
+
     leaves, nullifiers, sks = initMerkleTree(5) 
+
+    print("Generating merkle tree")
+    genmerkle_begin = time()
     root, layers = genMerkelTree(29, leaves) 
+    genmerkle_end = time()
+    print("genMerkelTree duration", genmerkle_end - genmerkle_begin)
 
     #part 2 definition of the vote properties.
     # You "sign" signal 1 to vote for canditate 1
@@ -49,7 +56,7 @@ if __name__ == "__main__":
     # You "sign" signal 2 to vote for candidate 2
     signal2 = sha256({"NomimatedSpokesPersonFor":root , "candidate": "Candidate2" })
     # You use external_nullifier to enforce one person (merkle tree memeber) one vote
-    external_nullifier = sha256("nomimatedSpokesPerson"+root+str(time.time()))
+    external_nullifier = sha256("nomimatedSpokesPerson"+root+str(time()))
     # We use signal_variables as a nonce so that you can update your vote.
     # But we do not implment this logic when counting votes as it makes to flow a little complicated
     signal_variables = sha256(str(1))
@@ -64,10 +71,15 @@ if __name__ == "__main__":
             signal = signal1
         else:
             signal = signal2
+        proof_begin = time()
+        print("Genwitness")
         proof, root = genWitness(leaves, nullifier, sk, signal , signal_variables, external_nullifier, address, tree_depth, 0, "../zksnark_element/pk.raw", True)
+        proof_end = time()
+        print("Proof time", proof_end - proof_begin)
         proofs.append(proof)
+        break
 
-
+    """
     signal1_count = 0
     signal2_count = 0 
     for proof in proofs:
@@ -92,4 +104,5 @@ if __name__ == "__main__":
         # hashed with the external nullifer. It is uiquie to each user and is unchnageable. So we can track their priuos 
         # vote and update it when the current vote is provided. 
         assert(output[2] == signal_variables)
+    """
     print("results candidate 1 " + str(signal1_count) + " candidate 2 " + str(signal2_count))
