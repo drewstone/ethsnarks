@@ -75,6 +75,7 @@ public:
 
     pb_variable_array<FieldT> member_scalars;
     std::shared_ptr<G1_variable<ppT> > member_public;
+    std::shared_ptr<G1_variable<ppT> > G1_ZERO;
     std::shared_ptr<G1_variable<ppT> > G1_ONE;
     std::shared_ptr<G1_multiscalar_mul_gadget<ppT> > member_mult;
 
@@ -116,14 +117,16 @@ public:
         // multiply(G1, signal)
         member_public.reset(new G1_variable<ppT>(pb, "member_public"));
         member_scalars.allocate(pb, 1, "member_scalars");
-        std::vector<G1_variable<ppT> > member_points;
+        G1_ZERO.reset( new G1_variable<ppT>(pb, alt_bn128_G1::zero(), "G1_ZERO") );
+        G1_ONE.reset( new G1_variable<ppT>(pb, alt_bn128_G1::one(), "G1_ONE") );
+        std::vector<G1_variable<ppT> > member_points = { *G1_ONE };
 
         member_mult.reset(new G1_multiscalar_mul_gadget<ppT>(pb,
-            G1_ONE,
+            *G1_ZERO,
             member_scalars,
             FieldT::size_in_bits(),
             member_points,
-            member_public, // result
+            *member_public, // result
             "member_mult"
         ));
 
