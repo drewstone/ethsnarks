@@ -2,7 +2,7 @@ ROOT_DIR := $(shell dirname $(realpath $(MAKEFILE_LIST)))
 
 PYTHON ?= python3
 NAME ?= ethsnarks
-NPM ?= npm
+NPM ?= yarn
 GANACHE ?= $(ROOT_DIR)/node_modules/.bin/ganache-cli
 TRUFFLE ?= $(ROOT_DIR)/node_modules/.bin/truffle
 
