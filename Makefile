@@ -32,11 +32,8 @@ build/src/libmiximus.so: build/Makefile
 	make -C build
 
 build/Makefile: build CMakeLists.txt
-	cd build && cmake ..
-
-depends/libsnarks/CMakeLists.txt:
-	git submodule update --init --recursive
-
+	git submodule update --init --recursive && cd build && CPPFLAGS=-I/usr/local/opt/openssl/include LDFLAGS=-L/usr/local/opt/openssl/lib PKG_CONFIG_PATH=/usr/local/opt/openssl/lib/pkgconfig cmake  .. -DWITH_PROCPS=OFF -DWITH_SUPERCOP=OFF
+	
 
 #######################################################################
 
